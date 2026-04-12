@@ -3,6 +3,7 @@ const { getAllUser, getAllUserWithStats, getUserById, updateUserInfo, changePass
 
 const router = express.Router();
 
+router.get("/get-all-user", getAllUser);
 router.get("/get-byid-user", getUserById);
 router.put("/update-user", updateUserInfo);
 router.post("/change-password", changePassword);
