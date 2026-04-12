@@ -27,14 +27,26 @@ const scrapeContent = async (url) => {
         const $ = cheerio.load(data);
         let title = '', description = '', contentHtml = '', coverImage = '';
 
+        // Danh sách các selector rác cần loại bỏ (Dùng cho cả 2 site)
+        const commonJunk = [
+            'header', 'footer', '.col-right', '.sidebar', '.adt_box', '.adt_banner', 
+            '.baiviet-lienquan', '.bv-lq', '.box-tin-lien-quan', '.social-share', 
+            '.cate-path', '.back-home-fixed', '.back-top', '.comment-container',
+            '.related-news-container', '.tin-bai-lien-quan', '.box-video-highlight', 
+            '.box-tin-moi-nhat', '#id_a_box_video_highlight', '.view-more-related', 
+            '.ads-container', '.baiviet-bailienquan', '.cate-24h-foot-arti-deta-sum',
+            '.article-more', '.box-sticky-ads', '.view-more-wrap', '.video-related', 
+            '.box-ads', '.view-more-info', '.article-footer', '.widget-container',
+            '.box-share', '.cate-24h-foot-arti-deta-sum', '.breadcrumb'
+        ].join(', ');
+
         if (url.includes('vnexpress.net')) {
             title = $('h1.title-detail').text().trim();
             description = $('p.description').text().trim() || $('meta[property="og:description"]').attr('content');
             coverImage = $('article.fck_detail img').first().attr('src') || $('meta[property="og:image"]').attr('content');
             
-            // Lấy nội dung, loại bỏ các phần thừa
             const contentObj = $('article.fck_detail');
-            contentObj.find('.list-news, .insert-link-article, .banner-ads, .tplCaption').remove();
+            contentObj.find(commonJunk + ', .list-news, .insert-link-article, .banner-ads, .tplCaption').remove();
             contentHtml = contentObj.html() || '';
         } 
         else if (url.includes('24h.com.vn')) {
@@ -43,7 +55,8 @@ const scrapeContent = async (url) => {
             coverImage = $('img.pic-detail').first().attr('src') || $('meta[property="og:image"]').attr('content');
             
             const contentObj = $('#article_body');
-            contentObj.find('.view-more-related, .ads-container, .baiviet-bailienquan').remove();
+            // 24h hay có tin liên quan xen kẽ trong bài
+            contentObj.find(commonJunk + ', .baiviet-bailienquan, .view-more-related').remove();
             contentHtml = contentObj.html() || '';
         }
 
@@ -73,7 +86,8 @@ Yêu cầu cực kỳ quan trọng:
 3. KHÔNG ĐƯỢC nhắc đến tên nguồn báo gốc, tên phóng viên hay các cụm từ "Theo...", "Báo ... đưa tin". Hãy viết như thể đây là tin độc quyền của bạn.
 4. Ngôn ngữ: Tiếng Việt, văn phong hiện đại, lôi cuốn.
 5. Đề xuất 3-5 tag (từ khóa) phù hợp nhất với bài viết này.
-6. Trả về kết quả DUY NHẤT dưới định dạng JSON có cấu trúc sau (không kèm markdown):
+6. Tuyệt đối LOẠI BỎ các phần: Quảng cáo, tin liên quan, kêu gọi theo dõi, các bảng tỷ số, các đoạn văn có nội dung mời gọi xem thêm bài khác (như "Bấm xem", "Video bóng đá...").
+7. Trả về kết quả DUY NHẤT dưới định dạng JSON có cấu trúc sau (không kèm markdown):
 {
   "title": "tiêu đề mới",
   "description": "mô tả mới",
