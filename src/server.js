@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const viewEngine = require('./config/viewEngine');
 const connectDB = require('./config/connectDB');
+const cors = require('cors');
 
 const baiviet = require('./routes/baivietRouter'); 
 const userRoutes = require('./routes/user');
