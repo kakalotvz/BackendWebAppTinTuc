@@ -18,16 +18,21 @@ const thongBaoRoutes  = require('./routes/thongBaoRoutes');
 const fileRouter  = require('./routes/fileRouter');
 const findOrCreate  = require('./routes/findOrCreate');
 
-const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 const cleanUploads = require('./utils/cleanUploads');
 const cron = require('node-cron');
 const { startCrawler } = require('./services/Crawler/crawlerService');
 
 require("dotenv").config();
 
-
 let app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: { origin: "*" }
+});
+global.io = io; // Chia sẻ io instance toàn cục để dùng trong services
 let port = process.env.PORT || 6969;
 
 connectDB();
@@ -103,11 +108,38 @@ app.use((err, req, res, next) => {
   next();
 });
 
-// Lịch cron: Quét tin tự động (mặc định 6 tiếng 1 lần)
-cron.schedule("0 */6 * * *", () => {
-    console.log("🤖 Đang bắt đầu quét tin tự động...");
-    startCrawler();
-});
+// Quản lý Cron Job cho Crawler
+let crawlerJob = null;
+const initCrawlerCron = async () => {
+    try {
+        const SystemSetting = require('./model/SystemSetting');
+        const settings = await SystemSetting.findOne();
+        const frequency = settings?.frequency || '6h';
+
+        // Map frequency string to cron expression
+        const cronMap = {
+            '30m': '*/30 * * * *',
+            '1h': '0 * * * *',
+            '6h': '0 */6 * * *',
+            '12h': '0 */12 * * *',
+            '1d': '0 0 * * *'
+        };
+
+        const expression = cronMap[frequency] || '0 */6 * * *';
+
+        if (crawlerJob) crawlerJob.stop();
+        
+        crawlerJob = cron.schedule(expression, () => {
+            console.log(`🤖 [Cron] Đang bắt đầu quét tin tự động (${frequency})...`);
+            startCrawler();
+        });
+        console.log(`📡 Đã thiết lập lịch quét tự động: ${frequency} (${expression})`);
+    } catch (e) {
+        console.error("Lỗi khi thiết lập Cron Crawler:", e);
+    }
+};
+initCrawlerCron();
+global.refreshCrawlerCron = initCrawlerCron; // Để Router gọi khi đổi settings
 
 // Lịch cron: "*/5 * * * *" = 5 phút 1 lần
 // cron.schedule("*/10 * * * *", () => {
@@ -115,6 +147,6 @@ cron.schedule("0 */6 * * *", () => {
 //   cleanUploads();
 // });
 
-app.listen(port, "0.0.0.0" ,() => {
+server.listen(port, "0.0.0.0" ,() => {
     console.log("backend nodejs is running on the port:", port, `\n http://localhost:${port}`);
 });

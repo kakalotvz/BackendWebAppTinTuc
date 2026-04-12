@@ -51,6 +51,12 @@ router.post('/settings', async (req, res) => {
             { value: req.body },
             { new: true, upsert: true }
         );
+
+        // Làm mới lịch quét tự động ngay lập tức
+        if (global.refreshCrawlerCron) {
+            global.refreshCrawlerCron();
+        }
+
         res.json(setting.value);
     } catch (e) { res.status(500).json({ message: e.message }); }
 });

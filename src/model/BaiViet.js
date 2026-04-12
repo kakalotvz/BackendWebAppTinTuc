@@ -13,6 +13,7 @@ const schema = new mongoose.Schema(
         nguoiTao: { type: mongoose.Schema.Types.ObjectId, ref: 'User', },
         likeCount: { type: Number, default: 0 },
         originUrl: { type: String, unique: true, sparse: true }, // URL gốc để tránh trùng lặp
+        isAiGenerated: { type: Boolean, default: false }, // Đánh dấu bài viết được AI viết lại
     }, 
     {
         // Lưu cả thời điểm tạo/cập nhật

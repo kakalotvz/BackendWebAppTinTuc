@@ -58,7 +58,7 @@ const scrapeContent = async (url) => {
  * Gọi Gemini AI để viết lại nội dung
  */
 const rewriteWithGemini = async (apiKey, article) => {
-    if (!apiKey) return article;
+    if (!apiKey) return { ...article, tags: [], isAi: false };
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
@@ -69,13 +69,16 @@ Bạn là một biên tập viên báo chí chuyên nghiệp. Hãy viết lại 
 
 Yêu cầu cực kỳ quan trọng:
 1. GIỮ NGUYÊN tất cả các thẻ HTML như <img> (cả thuộc tính src, alt), <a> (cả thuộc tính href). Không được thay đổi hay xóa bỏ chúng.
-2. Viết lại: Tiêu đề (title), Mô tả ngắn (description) và Nội dung chính (content).
-3. Ngôn ngữ: Tiếng Việt.
-4. Trả về kết quả dưới định dạng JSON có cấu trúc:
+2. Viết lại hoàn toàn: Tiêu đề (title), Mô tả ngắn (description) và Nội dung chính (content).
+3. KHÔNG ĐƯỢC nhắc đến tên nguồn báo gốc, tên phóng viên hay các cụm từ "Theo...", "Báo ... đưa tin". Hãy viết như thể đây là tin độc quyền của bạn.
+4. Ngôn ngữ: Tiếng Việt, văn phong hiện đại, lôi cuốn.
+5. Đề xuất 3-5 tag (từ khóa) phù hợp nhất với bài viết này.
+6. Trả về kết quả DUY NHẤT dưới định dạng JSON có cấu trúc sau (không kèm markdown):
 {
   "title": "tiêu đề mới",
   "description": "mô tả mới",
-  "content": "nội dung HTML mới đã được biên tập"
+  "content": "nội dung HTML mới đã được biên tập",
+  "tags": ["tag1", "tag2", "tag3"]
 }
 
 Nội dung gốc:
@@ -86,21 +89,23 @@ Nội dung HTML: ${article.contentHtml}
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        const text = response.text();
+        let text = response.text();
         
         // Clean text if AI adds markdown code blocks
-        const jsonStr = text.replace(/```json|```/g, '').trim();
-        const rewritten = JSON.parse(jsonStr);
+        text = text.replace(/```json|```/g, '').trim();
+        const rewritten = JSON.parse(text);
 
         return {
             ...article,
             title: rewritten.title || article.title,
             description: rewritten.description || article.description,
-            contentHtml: rewritten.content || article.contentHtml
+            contentHtml: rewritten.content || article.contentHtml,
+            tags: rewritten.tags || [],
+            isAi: true
         };
     } catch (error) {
         console.error("Lỗi AI Rewrite:", error.message);
-        return article; // Trả về bản gốc nếu lỗi AI
+        return { ...article, tags: [], isAi: false }; 
     }
 };
 
@@ -113,11 +118,17 @@ const runCrawlSource = async (config, settings) => {
         return;
     }
 
-    console.log(`--- Đang quét nguồn: ${config.name} (Chế độ: ${config.crawlMode}) ---`);
+    const maxItems = settings.maxArticles || 10;
+    console.log(`--- Đang quét nguồn: ${config.name} (Chế độ: ${config.crawlMode}, Giới hạn: ${maxItems}) ---`);
     try {
         const feed = await parser.parseURL(config.url);
+        let count = 0;
+        const totalItems = feed.items.length;
         
-        for (const item of feed.items) {
+        for (let i = 0; i < totalItems; i++) {
+            if (count >= maxItems) break;
+            const item = feed.items[i];
+
             // --- Kiểm tra ngày ---
             if (config.crawlMode !== 'all') {
                 const itemDate = new Date(item.isoDate || item.pubDate);
@@ -125,7 +136,6 @@ const runCrawlSource = async (config, settings) => {
                 const end = config.endDate ? new Date(config.endDate) : null;
 
                 if (config.crawlMode === 'specific_day' && start) {
-                    // Cùng ngày (bỏ qua giờ)
                     if (itemDate.toDateString() !== start.toDateString()) continue;
                 } 
                 else if (config.crawlMode === 'date_range') {
@@ -138,29 +148,39 @@ const runCrawlSource = async (config, settings) => {
             const exists = await BaiViet.findOne({ originUrl: item.link });
             if (exists) continue;
 
-            console.log(`Đang xử lý bài: ${item.title} (${item.isoDate || item.pubDate})`);
+            // Bắn tín hiệu progress realtime
+            if (global.io) {
+                global.io.emit('crawler:progress', {
+                    current: count + 1,
+                    total: Math.min(maxItems, totalItems),
+                    title: item.title.length > 60 ? item.title.substring(0, 60) + "..." : item.title,
+                    source: config.name
+                });
+            }
+
+            console.log(`Đang xử lý [${count + 1}]: ${item.title}`);
             
             // 1. Scrape nội dung
             let scraped = await scrapeContent(item.link);
             if (!scraped || !scraped.contentHtml) continue;
 
             // 2. Rewrite với AI
-            let finalData = scraped;
-            if (settings && settings.geminiKey) {
-                finalData = await rewriteWithGemini(settings.geminiKey, scraped);
-            }
+            let finalData = await rewriteWithGemini(settings.geminiKey, scraped);
 
-            // 3. Lưu vào DB (Draft/Pending)
+            // 3. Lưu vào DB
             await BaiViet.create({
                 title: finalData.title,
                 anhBia: finalData.coverImage,
                 moTaNgan: finalData.description,
                 noiDungChinh: finalData.contentHtml,
+                tags: finalData.tags || [],
                 theLoai: config.targetCategory,
-                status: false, // Bài viết chờ duyệt
-                originUrl: item.link
+                status: false,
+                originUrl: item.link,
+                isAiGenerated: finalData.isAi || false
             });
 
+            count++;
             console.log(`✅ Đã lưu bài: ${finalData.title}`);
         }
 
@@ -181,9 +201,11 @@ const startCrawler = async () => {
         const settings = await getCrawlerSettings();
         const configs = await CrawlerConfig.find({ isActive: true });
 
+        if (global.io) global.io.emit('crawler:status', { running: true, message: "Khởi động..." });
         for (const config of configs) {
             await runCrawlSource(config, settings);
         }
+        if (global.io) global.io.emit('crawler:status', { running: false, message: "Hoàn tất!" });
     } catch (error) {
         console.error("Lỗi khởi chạy Crawler:", error.message);
     }
