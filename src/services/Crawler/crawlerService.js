@@ -29,21 +29,21 @@ const scrapeContent = async (url) => {
 
         if (url.includes('vnexpress.net')) {
             title = $('h1.title-detail').text().trim();
-            description = $('p.description').text().trim();
+            description = $('p.description').text().trim() || $('meta[property="og:description"]').attr('content');
             coverImage = $('article.fck_detail img').first().attr('src') || $('meta[property="og:image"]').attr('content');
             
             // Lấy nội dung, loại bỏ các phần thừa
             const contentObj = $('article.fck_detail');
-            contentObj.find('.list-news, .insert-link-article, .banner-ads').remove();
+            contentObj.find('.list-news, .insert-link-article, .banner-ads, .tplCaption').remove();
             contentHtml = contentObj.html() || '';
         } 
         else if (url.includes('24h.com.vn')) {
-            title = $('h1.hti').text().trim();
-            description = $('h2.hdesc').text().trim();
+            title = $('h1').first().text().trim();
+            description = $('.cate-24h-foot-arti-deta-sum').text().trim() || $('h2.hdesc').text().trim();
             coverImage = $('img.pic-detail').first().attr('src') || $('meta[property="og:image"]').attr('content');
             
-            const contentObj = $('#baiviet-container');
-            contentObj.find('.view-more-related, .ads-container').remove();
+            const contentObj = $('#article_body');
+            contentObj.find('.view-more-related, .ads-container, .baiviet-bailienquan').remove();
             contentHtml = contentObj.html() || '';
         }
 
