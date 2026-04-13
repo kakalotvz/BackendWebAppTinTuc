@@ -37,7 +37,8 @@ const scrapeContent = async (url) => {
             '.ads-container', '.baiviet-bailienquan', '.cate-24h-foot-arti-deta-sum',
             '.article-more', '.box-sticky-ads', '.view-more-wrap', '.video-related', 
             '.box-ads', '.view-more-info', '.article-footer', '.widget-container',
-            '.box-share', '.cate-24h-foot-arti-deta-sum', '.breadcrumb'
+            '.box-share', '.breadcrumb', '.TextlinkBaiviet', '.url_tin_lien_quan_trong_bai', 
+            '.see-now', 'div[id^="ADS"]', '.article-meta', '.article-utility', '#article_meta'
         ].join(', ');
 
         if (url.includes('vnexpress.net')) {
@@ -51,12 +52,39 @@ const scrapeContent = async (url) => {
         } 
         else if (url.includes('24h.com.vn')) {
             title = $('h1').first().text().trim();
-            description = $('.cate-24h-foot-arti-deta-sum').text().trim() || $('h2.hdesc').text().trim();
-            coverImage = $('img.pic-detail').first().attr('src') || $('meta[property="og:image"]').attr('content');
+            description = $('#article_sapo').text().trim() || $('.cate-24h-foot-arti-deta-sum').text().trim() || $('h2.hdesc').text().trim();
+            coverImage = $('meta[property="og:image"]').attr('content') || $('img.pic-detail').first().attr('src');
             
             const contentObj = $('#article_body');
-            // 24h hay có tin liên quan xen kẽ trong bài
-            contentObj.find(commonJunk + ', .baiviet-bailienquan, .view-more-related').remove();
+            
+            // Xử lý hình ảnh: Chuyển data-original thành src và loại bỏ rác trên ảnh
+            contentObj.find('img').each((i, el) => {
+                const dataOriginal = $(el).attr('data-original');
+                const src = $(el).attr('src');
+                
+                // Nếu là logo hoặc icon thì xóa bỏ
+                if ((src && src.includes('logo')) || (dataOriginal && dataOriginal.includes('logo'))) {
+                    $(el).remove();
+                    return;
+                }
+
+                if (dataOriginal) {
+                    $(el).attr('src', dataOriginal);
+                    $(el).removeAttr('data-original');
+                }
+                $(el).removeAttr('class');
+                $(el).removeAttr('style');
+                $(el).removeAttr('width');
+                $(el).removeAttr('height');
+            });
+
+            // Loại bỏ rác và các link tin liên quan xen kẽ
+            contentObj.find(commonJunk).remove();
+            
+            // Một số thành phần 24h hay chèn vào cuối bài
+            contentObj.find('.source, .author, .date, .time').remove();
+            contentObj.find('script, style, iframe:not([src*="youtube.com"]):not([src*="vimeo.com"])').remove();
+            
             contentHtml = contentObj.html() || '';
         }
 
