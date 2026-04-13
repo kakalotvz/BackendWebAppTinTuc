@@ -108,16 +108,17 @@ const scrapeContent = async (url) => {
 };
 
 /**
- * Gọi Gemini AI để viết lại nội dung
+ * Hàm tạo độ trễ (delay) chạy ngầm
+ */
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Gọi Gemini AI để viết lại nội dung (Có cơ chế Retry chống quá tải)
  */
 const rewriteWithGemini = async (apiKey, article) => {
     if (!apiKey) return { ...article, tags: [], isAi: false };
 
-    try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-        const prompt = `
+    const prompt = `
 Bạn là một biên tập viên báo chí chuyên nghiệp. Hãy viết lại bài báo sau đây để có văn phong mới mẻ, hấp dẫn hơn nhưng vẫn giữ nguyên ý nghĩa gốc và các sự thật (facts).
 
 Yêu cầu cực kỳ quan trọng:
@@ -127,7 +128,7 @@ Yêu cầu cực kỳ quan trọng:
 4. Ngôn ngữ: Tiếng Việt, văn phong hiện đại, lôi cuốn.
 5. Đề xuất 3-5 tag (từ khóa) phù hợp nhất với bài viết này.
 6. Tuyệt đối LOẠI BỎ các phần: Quảng cáo, tin liên quan, kêu gọi theo dõi, các bảng tỷ số, các đoạn văn có nội dung mời gọi xem thêm bài khác (như "Bấm xem", "Video bóng đá...").
-7. Trả về kết quả DUY NHẤT dưới định dạng JSON có cấu trúc sau (không kèm markdown):
+7. Trả về kết quả DUY NHẤT dưới định dạng JSON có cấu trúc sau:
 {
   "title": "tiêu đề mới",
   "description": "mô tả mới",
@@ -141,25 +142,49 @@ Mô tả: ${article.description}
 Nội dung HTML: ${article.contentHtml}
 `;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        let text = response.text();
-        
-        // Clean text if AI adds markdown code blocks
-        text = text.replace(/```json|```/g, '').trim();
-        const rewritten = JSON.parse(text);
+    const maxRetries = 3;
+    let attempt = 0;
 
-        return {
-            ...article,
-            title: rewritten.title || article.title,
-            description: rewritten.description || article.description,
-            contentHtml: rewritten.content || article.contentHtml,
-            tags: rewritten.tags || [],
-            isAi: true
-        };
-    } catch (error) {
-        console.error("Lỗi AI Rewrite:", error.message);
-        return { ...article, tags: [], isAi: false }; 
+    // Khởi tạo model một lần
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-2.5-flash",
+        generationConfig: { 
+            responseMimeType: "application/json" 
+        }
+    });
+
+    while (attempt < maxRetries) {
+        attempt++;
+        try {
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+            
+            // Do đã có responseMimeType: "application/json", text chắc chắn là JSON hợp lệ
+            const rewritten = JSON.parse(text);
+
+            return {
+                ...article,
+                title: rewritten.title || article.title,
+                description: rewritten.description || article.description,
+                contentHtml: rewritten.content || article.contentHtml,
+                tags: rewritten.tags || [],
+                isAi: true
+            };
+        } catch (error) {
+            console.error(`[AI REWRITE LỖI] Lần thử ${attempt}/${maxRetries} thất bại:`, error.message);
+            
+            if (attempt < maxRetries) {
+                // Tăng dần thời gian chờ: 3s, 6s
+                const waitTime = attempt * 3000;
+                console.log(`[AI REWRITE] Đang chờ ${waitTime/1000}s để thử gọi lại API Gemini...`);
+                await delay(waitTime);
+            } else {
+                console.error("[AI REWRITE CẢNH BÁO] API Gemini quá tải/lỗi. Hệ thống đã hủy bỏ lệnh viết lại và sẽ dùng bài gốc.");
+                return { ...article, tags: [], isAi: false }; 
+            }
+        }
     }
 };
 
