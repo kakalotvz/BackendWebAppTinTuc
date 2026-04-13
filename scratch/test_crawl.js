@@ -49,7 +49,7 @@ async function testSingleCrawl() {
         });
 
         contentObj.find(commonJunk).remove();
-        contentObj.find('.source, .author, .date, .time').remove();
+        contentObj.find('.bv-sk-lb-cs, .bv-lb-cs, .author, .updTme, .source, .time').remove();
         contentObj.find('script, style, iframe:not([src*="youtube.com"]):not([src*="vimeo.com"])').remove();
 
         console.log("Title found:", title);

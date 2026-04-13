@@ -81,8 +81,10 @@ const scrapeContent = async (url) => {
             // Loại bỏ rác và các link tin liên quan xen kẽ
             contentObj.find(commonJunk).remove();
             
-            // Một số thành phần 24h hay chèn vào cuối bài
-            contentObj.find('.source, .author, .date, .time').remove();
+            // Các thành phần giao diện đặc thù của 24h (theo yêu cầu người dùng)
+            contentObj.find('.bv-sk-lb-cs, .bv-lb-cs, .author, .updTme, .source, .time').remove();
+            
+            // Xóa các thẻ script/style và iframe không phải video chính
             contentObj.find('script, style, iframe:not([src*="youtube.com"]):not([src*="vimeo.com"])').remove();
             
             contentHtml = contentObj.html() || '';
