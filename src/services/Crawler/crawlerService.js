@@ -82,10 +82,20 @@ const scrapeContent = async (url) => {
             contentObj.find(commonJunk).remove();
             
             // Các thành phần giao diện đặc thù của 24h (theo yêu cầu người dùng)
-            contentObj.find('.bv-sk-lb-cs, .bv-lb-cs, .author, .updTme, .source, .time').remove();
+            const specificJunk24h = [
+                '.bv-sk-lb-cs', '.bv-lb-cs', '.author', '.updTme', '.source', '.time',
+                '.btn-save-news', '.btn-save-24h', '.cv19-sha-social', '.box-share-send-bv',
+                '.nguontin', '.source-time-art24h', '.bmTpSeoBlk', '#popup_save_news_result',
+                '.cate-24h-foot-arti-deta-social', '.btn-kd-social', '.mar-b-30'
+            ].join(', ');
+            contentObj.find(specificJunk24h).remove();
             
             // Xóa các thẻ script/style và iframe không phải video chính
             contentObj.find('script, style, iframe:not([src*="youtube.com"]):not([src*="vimeo.com"])').remove();
+            
+            // TIÊU DIỆT TẬN GỐC CÁC LỖI HIỂN THỊ (Overlapping):
+            // Xóa toàn bộ thuộc tính style, class, id của mọi thẻ để trả về HTML siêu sạch
+            contentObj.find('*').removeAttr('style').removeAttr('class').removeAttr('id');
             
             contentHtml = contentObj.html() || '';
         }
